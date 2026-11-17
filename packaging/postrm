@@ -3,4 +3,13 @@ set -e
 if [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
 fi
+# purge: the settings somebody wrote for it go too (the database's
+# address, perhaps a password)
+if [ "$1" = purge ]; then
+    rm -f /etc/default/dnsinfo
+    # its user owns nothing that stays (its directory is under /run)
+    if getent passwd dnsinfo >/dev/null && command -v deluser >/dev/null 2>&1; then
+        deluser --quiet --system dnsinfo >/dev/null 2>&1 || true
+    fi
+fi
 exit 0

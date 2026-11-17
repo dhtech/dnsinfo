@@ -2,8 +2,9 @@
 #
 # The database: DNSINFO_DSN in /etc/default/dnsinfo (root only), or an
 # Environment= line in a drop-in. More options: DNSINFO_OPTS, the same
-# way (for example "-metrics /var/lib/prometheus/node-exporter/dnsinfo.prom",
-# with that directory in a ReadWritePaths= line).
+# way - for example "-metrics /run/dnsinfo/dnsinfo.prom", the one
+# directory the program may write to (link the file to where your
+# node exporter reads its text files).
 #
 # In named.conf:
 #   options {
@@ -11,21 +12,28 @@
 #       dnstap-output unix "/run/dnsinfo/dnstap.sock";
 #   };
 #
-# It runs as uid 0 WITHOUT any of root's privileges (the capability set
-# is empty): what is left is what any owner may do - write its own
-# socket and give it to a group it is in. That group is "bind", so that
-# the name server, and nobody else, may write to the socket.
+# It runs as the user "dnsinfo" (made by the package), without any
+# privilege, and owns nothing but its directory /run/dnsinfo. It is in
+# the group "bind" (the package depends on bind9 for it) and gives its
+# socket to that group, so that the name server, and nobody else, may
+# write to it.
 [Unit]
 Description=dnsinfo - which domains the name server is asked for
 Documentation=https://github.com/dhtech/dnsinfo
 After=network-online.target
 Wants=network-online.target
+# the name server connects to our socket: be there first
+Before=named.service
 
 [Service]
 EnvironmentFile=-/etc/default/dnsinfo
 ExecStart=/usr/sbin/dnsinfo -socket /run/dnsinfo/dnstap.sock -socket-group bind $DNSINFO_OPTS
 Restart=always
 RestartSec=5
+# started wrongly (no database given): the same again, so not again
+RestartPreventExitStatus=78
+User=dnsinfo
+Group=dnsinfo
 SupplementaryGroups=bind
 RuntimeDirectory=dnsinfo
 RuntimeDirectoryMode=0755

@@ -3,6 +3,11 @@ set -e
 # A first installation starts nothing: dnsinfo needs its database, and
 # whoever installs the package decides when it runs. On an upgrade, a
 # dnsinfo that is running continues as the new version.
+# the user the unit runs it as: no home, no shell, no password
+if [ "$1" = configure ] && ! getent passwd dnsinfo >/dev/null; then
+    adduser --system --group --quiet --no-create-home \
+        --home /nonexistent dnsinfo
+fi
 if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
     systemctl daemon-reload || true
     systemctl try-restart dnsinfo.service || true

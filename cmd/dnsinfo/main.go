@@ -43,6 +43,21 @@ import (
 // say what it is going to send.
 const handshakeWait = 10 * time.Second
 
+// writeWait is how long one write to the database may take, the
+// connecting included. A database that neither answers nor refuses
+// would otherwise hold the program until the network gives up.
+const writeWait = 30 * time.Second
+
+// exitConfig is what the program ends with when it was started wrongly
+// (EX_CONFIG of sysexits.h): starting it again would end the same way,
+// and the unit does not try.
+const exitConfig = 78
+
+func misconfigured(what string) {
+	log.Print(what)
+	os.Exit(exitConfig)
+}
+
 // version is set by the release build (-ldflags -X main.version=...).
 var version = "dev"
 
@@ -93,10 +108,10 @@ func main() {
 	}
 	log.SetFlags(0) // the journal has the time
 	if o.dsn == "" {
-		log.Fatal("no database given: -dsn or DNSINFO_DSN")
+		misconfigured("no database given: -dsn or DNSINFO_DSN")
 	}
 	if o.flush < 100*time.Millisecond || o.maxDomains < 1 || o.maxHeld < 1 {
-		log.Fatal("-flush, -max-domains or -max-held is too small")
+		misconfigured("-flush, -max-domains or -max-held is too small")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -302,7 +317,9 @@ func write(ctx context.Context, o options, counter *count.Counter, c *counters) 
 	ticker := time.NewTicker(o.flush)
 	defer ticker.Stop()
 	for {
-		flush(ctx)
+		limited, cancel := context.WithTimeout(ctx, writeWait)
+		flush(limited)
+		cancel()
 		writeMetrics(o.metrics, c, counter.Held())
 		select {
 		case <-ctx.Done():

@@ -3,7 +3,7 @@ Version: @VERSION@
 Architecture: @ARCH@
 Maintainer: dhtech <dhtech@users.noreply.github.com>
 Installed-Size: @SIZE@
-Suggests: bind9
+Depends: adduser, bind9
 Section: net
 Priority: optional
 Homepage: https://github.com/dhtech/dnsinfo
@@ -13,6 +13,8 @@ Description: counts which domains a name server is asked for
  keeps a counter per domain and hour in a PostgreSQL database. Nothing
  about who asked is kept.
  .
- One static binary and the unit dnsinfo.service. A first installation
- neither enables nor starts it: it needs a database first
+ One static binary and the unit dnsinfo.service, which runs it as a
+ user of its own, "dnsinfo". It depends on bind9 for the group "bind",
+ which the socket is given to. A first
+ installation neither enables nor starts it: it needs a database first
  (DNSINFO_DSN in /etc/default/dnsinfo).

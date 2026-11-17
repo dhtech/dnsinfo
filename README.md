@@ -88,9 +88,9 @@ path.
 ### The Debian package
 
 A release carries `dnsinfo_<version>_<arch>.deb`: the binary as
-`/usr/sbin/dnsinfo` and the unit `dnsinfo.service`. It depends on
-nothing. Installing it starts nothing; give it its database and start
-it:
+`/usr/sbin/dnsinfo` and the unit `dnsinfo.service`. It makes a user
+`dnsinfo` for the program and depends on `bind9`, for the group `bind`.
+Installing it starts nothing; give it its database and start it:
 
 ```
 echo 'DNSINFO_DSN=host=db.example.net dbname=dnsinfo user=dnsinfo sslmode=verify-full' > /etc/default/dnsinfo
@@ -99,9 +99,13 @@ systemctl enable --now dnsinfo
 ```
 
 The unit listens on `/run/dnsinfo/dnstap.sock` and gives the socket to
-the group `bind`. It runs as uid 0 with an empty capability set: it can
-do what the owner of its own files can, and nothing of what root can.
-More options go in `DNSINFO_OPTS`, in the same file or in a drop-in.
+the group `bind`. It runs as the user `dnsinfo`, with no privileges;
+the one place it can write to is `/run/dnsinfo`. If nothing was given
+to start it with it ends once, with status 78, and is not started
+again. More options go in `DNSINFO_OPTS`, in
+the same file or in a drop-in - for the metrics, for example,
+`DNSINFO_OPTS=-metrics /run/dnsinfo/dnsinfo.prom`, with a link to that
+file where the node exporter reads its text files.
 
 The same binary without a package is `dnsinfo_<version>_linux_<arch>.tar.gz`.
 
