@@ -1,0 +1,36 @@
+# An example unit. Put the connection string in /etc/dnsinfo.env as
+#   DNSINFO_DSN=host=db.example.net dbname=dnsinfo user=dnsinfo sslmode=verify-full ...
+# readable by root only (systemd reads it, the service's user need not).
+#
+# The name server must be able to write to the socket: here it is given
+# to the group "bind", and the directory is opened for that group.
+# In named.conf:
+#   options {
+#       dnstap { client response; };
+#       dnstap-output unix "/run/dnsinfo/dnstap.sock";
+#   };
+[Unit]
+Description=dnsinfo - which domains the name server is asked for
+Documentation=https://github.com/dhtech/dnsinfo
+After=network-online.target
+Wants=network-online.target
+# the name server connects to our socket: be there first
+Before=named.service
+
+[Service]
+EnvironmentFile=/etc/dnsinfo.env
+ExecStart=/usr/local/bin/dnsinfo -socket /run/dnsinfo/dnstap.sock -socket-group bind
+Restart=always
+RestartSec=5
+DynamicUser=yes
+SupplementaryGroups=bind
+RuntimeDirectory=dnsinfo
+RuntimeDirectoryMode=0755
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
