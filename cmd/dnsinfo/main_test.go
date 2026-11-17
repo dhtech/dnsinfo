@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -14,12 +15,18 @@ import (
 	"time"
 
 	"github.com/dhtech/dnsinfo/internal/count"
-	"github.com/dhtech/dnsinfo/internal/dnstap"
-	"github.com/dhtech/dnsinfo/internal/fstrm"
 )
 
-// What a name server sends, built by hand: Frame Streams around
-// protocol buffers around DNS messages.
+// What a name server sends, built by hand - Frame Streams around
+// protocol buffers around DNS messages - and not with the libraries
+// the program reads it with: the bytes here are the protocols' own
+// (fstrm's control.h, dnstap.proto).
+
+const (
+	contentType    = "protobuf:dnstap.Dnstap"
+	clientQuery    = 5 // dnstap.Message.Type CLIENT_QUERY
+	clientResponse = 6 // dnstap.Message.Type CLIENT_RESPONSE
+)
 
 func uvarint(v uint64) []byte {
 	var b []byte
@@ -76,13 +83,13 @@ func control(kind uint32, contentType string) []byte {
 func send(t *testing.T, conn net.Conn, frames ...[]byte) {
 	t.Helper()
 	defer conn.Close()
-	conn.Write(control(4, dnstap.ContentType)) // READY
-	accept := make([]byte, len(control(1, dnstap.ContentType)))
+	conn.Write(control(4, contentType)) // READY
+	accept := make([]byte, len(control(1, contentType)))
 	if _, err := conn.Read(accept); err != nil {
 		t.Errorf("no ACCEPT: %v", err)
 		return
 	}
-	conn.Write(control(2, dnstap.ContentType)) // START
+	conn.Write(control(2, contentType)) // START
 	for _, f := range frames {
 		conn.Write(append(binary.BigEndian.AppendUint32(nil, uint32(len(f))), f...))
 	}
@@ -95,21 +102,21 @@ const hour10 = 1767348000 // 2026-01-02 10:00:00 UTC
 func TestAStreamIsCountedByDomainAndNothingElseIsKept(t *testing.T) {
 	a, b := net.Pipe()
 	go send(t, b,
-		tap(dnstap.ClientResponse, hour10+5, dns("www.example.org", 0)),
-		tap(dnstap.ClientResponse, hour10+6, dns("mail.example.org", 0)),
-		tap(dnstap.ClientResponse, hour10+7, dns("nothing.example.net", 3)),
-		tap(dnstap.ClientResponse, hour10+3700, dns("www.example.org", 0)),
-		tap(dnstap.ClientResponse, hour10+8, dns("www.example.co.uk", 2)),
-		tap(5, hour10+9, nil),                                    // a client's question: not an answer
-		tap(dnstap.ClientResponse, hour10+9, nil),                // an answer without the answer
-		tap(dnstap.ClientResponse, hour10+9, []byte{1, 2, 3}),    // not a DNS message
-		[]byte{0x72, 0xff, 0xff, 0xff, 0x0f},                     // not a dnstap message
-		tap(dnstap.ClientResponse, 0, dns("now.example.org", 0)), // no time in it: ours is used
+		tap(clientResponse, hour10+5, dns("www.example.org", 0)),
+		tap(clientResponse, hour10+6, dns("mail.example.org", 0)),
+		tap(clientResponse, hour10+7, dns("nothing.example.net", 3)),
+		tap(clientResponse, hour10+3700, dns("www.example.org", 0)),
+		tap(clientResponse, hour10+8, dns("www.example.co.uk", 2)),
+		tap(5, hour10+9, nil),                             // a client's question: not an answer
+		tap(clientResponse, hour10+9, nil),                // an answer without the answer
+		tap(clientResponse, hour10+9, []byte{1, 2, 3}),    // not a DNS message
+		[]byte{0x72, 0xff, 0xff, 0xff, 0x0f},              // not a dnstap message
+		tap(clientResponse, 0, dns("now.example.org", 0)), // no time in it: ours is used
 	)
 	counter := count.New(1000)
 	var c counters
 	now := func() time.Time { return time.Unix(hour10+7300, 0) }
-	if err := read(a, counter, &c, 1000, now); !errors.Is(err, fstrm.ErrStopped) {
+	if err := read(a, counter, &c, 1000, now); !errors.Is(err, io.EOF) {
 		t.Fatalf("the stream ended with %v", err)
 	}
 	got := map[string]int64{}
@@ -134,10 +141,10 @@ func TestAStreamIsCountedByDomainAndNothingElseIsKept(t *testing.T) {
 func TestWithTheDatabaseAwayTooLongAnswersAreDroppedAndCounted(t *testing.T) {
 	a, b := net.Pipe()
 	go send(t, b,
-		tap(dnstap.ClientResponse, hour10, dns("a.example", 0)),
-		tap(dnstap.ClientResponse, hour10, dns("b.example", 0)),
-		tap(dnstap.ClientResponse, hour10, dns("c.example", 0)),
-		tap(dnstap.ClientResponse, hour10, dns("a.example", 0)))
+		tap(clientResponse, hour10, dns("a.example", 0)),
+		tap(clientResponse, hour10, dns("b.example", 0)),
+		tap(clientResponse, hour10, dns("c.example", 0)),
+		tap(clientResponse, hour10, dns("a.example", 0)))
 	counter := count.New(1000)
 	var c counters
 	read(a, counter, &c, 2, time.Now) // room for two counters

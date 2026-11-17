@@ -29,13 +29,19 @@ import (
 	"syscall"
 	"time"
 
+	dnstap "github.com/dnstap/golang-dnstap"
+	framestream "github.com/farsightsec/golang-framestream"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/dhtech/dnsinfo/internal/count"
 	"github.com/dhtech/dnsinfo/internal/dnsmsg"
-	"github.com/dhtech/dnsinfo/internal/dnstap"
 	"github.com/dhtech/dnsinfo/internal/domain"
-	"github.com/dhtech/dnsinfo/internal/fstrm"
 	"github.com/dhtech/dnsinfo/internal/store"
 )
+
+// handshakeWait is how long a name server that has connected gets to
+// say what it is going to send.
+const handshakeWait = 10 * time.Second
 
 // version is set by the release build (-ldflags -X main.version=...).
 var version = "dev"
@@ -178,7 +184,7 @@ func accept(ctx context.Context, l net.Listener, counter *count.Counter, c *coun
 			err := read(conn, counter, c, maxHeld, time.Now)
 			switch {
 			case ctx.Err() != nil:
-			case errors.Is(err, fstrm.ErrStopped), errors.Is(err, io.EOF):
+			case errors.Is(err, io.EOF):
 				log.Print("the name server closed its stream")
 			default:
 				log.Printf("the stream ended: %v", err)
@@ -187,30 +193,44 @@ func accept(ctx context.Context, l net.Listener, counter *count.Counter, c *coun
 	}
 }
 
-// read counts the answers of one stream until it ends.
+// read counts the answers of one stream until it ends: io.EOF when the
+// name server closed it properly. The stream is dnstap's own format,
+// read by the dnstap project's libraries: Frame Streams around
+// protocol buffers.
 func read(conn io.ReadWriter, counter *count.Counter, c *counters, maxHeld int, now func() time.Time) error {
-	stream, err := fstrm.Handshake(conn, dnstap.ContentType)
+	stream, err := framestream.NewReader(conn, &framestream.ReaderOptions{
+		ContentTypes:  [][]byte{dnstap.FSContentType},
+		Bidirectional: true,
+		Timeout:       handshakeWait,
+	})
 	if err != nil {
 		return err
 	}
-	var buf []byte
+	buf := make([]byte, dnstap.MaxPayloadSize)
+	var tap dnstap.Dnstap
 	for {
-		frame, err := stream.Frame(buf)
-		if err != nil {
-			return err
-		}
-		buf = frame
-		c.frames.Add(1)
-		m, err := dnstap.Decode(frame)
-		if err != nil {
+		n, err := stream.ReadFrame(buf)
+		if errors.Is(err, framestream.ErrDataFrameTooLarge) {
+			// stepped over by the library; the stream goes on
+			c.frames.Add(1)
 			c.unreadable.Add(1)
 			continue
 		}
-		if m.Type != dnstap.ClientResponse || len(m.Response) == 0 {
+		if err != nil {
+			return err
+		}
+		c.frames.Add(1)
+		if err := proto.Unmarshal(buf[:n], &tap); err != nil {
+			c.unreadable.Add(1)
+			continue
+		}
+		m := tap.GetMessage()
+		answer := m.GetResponseMessage()
+		if m.GetType() != dnstap.Message_CLIENT_RESPONSE || len(answer) == 0 {
 			c.other.Add(1)
 			continue
 		}
-		name, result, err := dnsmsg.Answer(m.Response)
+		name, result, err := dnsmsg.Answer(answer)
 		if errors.Is(err, dnsmsg.ErrNotCounted) {
 			c.other.Add(1)
 			continue
@@ -226,8 +246,8 @@ func read(conn io.ReadWriter, counter *count.Counter, c *counters, maxHeld int, 
 			continue
 		}
 		when := now()
-		if m.Seconds != 0 {
-			when = time.Unix(int64(m.Seconds), 0)
+		if seconds := m.GetResponseTimeSec(); seconds != 0 {
+			when = time.Unix(int64(seconds), 0)
 		}
 		counter.Add(domain.Of(name), result, when)
 		c.counted.Add(1)
