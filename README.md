@@ -51,6 +51,13 @@ One label more than the public suffix - the part somebody registered:
 `example.co.uk`. The list of public suffixes is built into the program;
 nothing is fetched when it runs.
 
+Only the official part of that list is used - the registries' own
+suffixes. Its private part, where companies have entered the names they
+hand out to customers, is not: `d111111abcdef8.cloudfront.net` counts as
+`cloudfront.net`, `alice.github.io` as `github.io`, a bucket under
+`s3.eu-north-1.amazonaws.com` as `amazonaws.com`. A top list then shows
+the company, not thousands of its customers one by one.
+
 - reverse lookups count as `in-addr.arpa` and `ip6.arpa`;
 - a name under a top level domain nobody knows (`host.site.internal`)
   keeps its last two labels;

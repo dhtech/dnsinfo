@@ -19,9 +19,20 @@ func TestOf(t *testing.T) {
 		"in-addr.arpa":                     "in-addr.arpa",
 		"1.0.0.0.8.b.d.0.1.0.0.2.ip6.arpa": "ip6.arpa",
 		"_sip._tcp.example.org":            "example.org",
-		".":                                ".",
-		"":                                 "",
-		"(invalid)":                        "(invalid)",
+		// the list's private part is not used: a company's customers
+		// count as the company
+		"d111111abcdef8.cloudfront.net":                     "cloudfront.net",
+		"cloudfront.net":                                    "cloudfront.net",
+		"my-bucket.s3.eu-north-1.amazonaws.com":             "amazonaws.com",
+		"s3.eu-north-1.amazonaws.com":                       "amazonaws.com",
+		"ec2-198-51-100-7.eu-north-1.compute.amazonaws.com": "amazonaws.com",
+		"alice.github.io":                                   "github.io",
+		"someblog.blogspot.com":                             "blogspot.com",
+		"shop.example.blogspot.co.uk":                       "blogspot.co.uk",
+		"e1234.a.akamaiedge.net":                            "akamaiedge.net",
+		".":                                                 ".",
+		"":                                                  "",
+		"(invalid)":                                         "(invalid)",
 	} {
 		if got := Of(name); got != want {
 			t.Errorf("Of(%q) = %q, want %q", name, got, want)
