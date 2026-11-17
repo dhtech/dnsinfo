@@ -81,9 +81,29 @@ options {
 };
 ```
 
-`contrib/dnsinfo.service` is an example unit. The name server must be
-able to write to the socket (`-socket-group`), and where it is confined
-by AppArmor or SELinux it must be allowed that path.
+The name server must be able to write to the socket (`-socket-group`),
+and where it is confined by AppArmor or SELinux it must be allowed that
+path.
+
+### The Debian package
+
+A release carries `dnsinfo_<version>_<arch>.deb`: the binary as
+`/usr/sbin/dnsinfo` and the unit `dnsinfo.service`. It depends on
+nothing. Installing it starts nothing; give it its database and start
+it:
+
+```
+echo 'DNSINFO_DSN=host=db.example.net dbname=dnsinfo user=dnsinfo sslmode=verify-full' > /etc/default/dnsinfo
+chmod 600 /etc/default/dnsinfo
+systemctl enable --now dnsinfo
+```
+
+The unit listens on `/run/dnsinfo/dnstap.sock` and gives the socket to
+the group `bind`. It runs as uid 0 with an empty capability set: it can
+do what the owner of its own files can, and nothing of what root can.
+More options go in `DNSINFO_OPTS`, in the same file or in a drop-in.
+
+The same binary without a package is `dnsinfo_<version>_linux_<arch>.tar.gz`.
 
 | Option | Default | |
 |---|---|---|
@@ -124,18 +144,23 @@ go build ./cmd/dnsinfo
 The tests of the database part need a PostgreSQL they may fill and
 empty: `DNSINFO_TEST_DSN=postgres://...`. Without it they are skipped.
 
-A tag `vX.Y.Z` builds release archives for linux amd64 and arm64.
+`sh .github/build.sh 1.2.3` builds what a release carries (it needs
+`dpkg-deb`); a tag `vX.Y.Z` does that on GitHub, for linux amd64 and
+arm64.
 
 ## What it reads, and how
 
-No dnstap or DNS library is used. Three small readers, each with its
-tests:
+The name server's stream is read with the protocols' own libraries;
+nothing of it is parsed by code of ours:
 
-- `internal/fstrm`: Frame Streams, the transport - the handshake and
-  the frames;
-- `internal/dnstap`: two messages and four fields of dnstap's protocol
-  buffer; everything else is stepped over;
-- `internal/dnsmsg`: the header and the first question of a DNS message.
+- Frame Streams, the transport: `github.com/farsightsec/golang-framestream`;
+- dnstap's protocol buffer: `github.com/dnstap/golang-dnstap`;
+- the DNS message inside: `golang.org/x/net/dns/dnsmessage`.
+
+What is ours is what happens to a name once it is read: `internal/dnsmsg`
+(which answers count, and as what), `internal/domain` (the name cut to
+its domain), `internal/count` (the counters) and `internal/store` (the
+database).
 
 ## License
 

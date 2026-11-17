@@ -39,4 +39,11 @@ jobs:
         env:
           DNSINFO_TEST_DSN: postgres://postgres:test@localhost:5432/dnsinfo_test?sslmode=disable
         run: go test -p 1 -count=1 ./...
-      - run: go build ./cmd/dnsinfo
+      # what a release would carry, so that a broken package is seen here
+      # and not at the tag
+      - name: Build the binaries and the packages
+        run: sh .github/build.sh 0.0.0
+      - name: Install and try the package on a machine with nothing else
+        run: >
+          docker run --rm -v "$PWD:/src:ro" -w /src debian:13
+          sh .github/try.sh 0.0.0

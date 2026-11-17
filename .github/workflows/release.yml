@@ -1,7 +1,12 @@
 name: release
 
-# Pushing a tag vX.Y.Z builds the binaries and publishes them as a GitHub
-# release: dnsinfo_<version>_linux_<arch>.tar.gz and SHA256SUMS.
+# Pushing a tag vX.Y.Z builds the release (.github/build.sh), installs
+# and tries the Debian package in a new debian:13 container that has
+# only the package (.github/try.sh), and publishes on a GitHub release:
+#
+#   dnsinfo_<version>_<arch>.deb            the package our servers install
+#   dnsinfo_<version>_linux_<arch>.tar.gz   the same binary without one
+#   SHA256SUMS
 
 on:
   push:
@@ -23,23 +28,12 @@ jobs:
       - run: go version
       - run: go vet ./...
       - run: go test ./...
-      - name: build
-        env:
-          CGO_ENABLED: '0'
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          mkdir -p dist
-          for arch in amd64 arm64; do
-            name="dnsinfo_${version}_linux_${arch}"
-            mkdir -p "build/${name}"
-            GOOS=linux GOARCH="${arch}" go build -trimpath \
-              -ldflags "-s -w -X main.version=${version}" \
-              -o "build/${name}/dnsinfo" ./cmd/dnsinfo
-            cp LICENSE README.md "build/${name}/"
-            cp -r contrib "build/${name}/"
-            tar -C build --owner=0 --group=0 --numeric-owner -czf "dist/${name}.tar.gz" "${name}"
-          done
-          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
+      - name: Build the binaries and the packages
+        run: sh .github/build.sh "${GITHUB_REF_NAME#v}"
+      - name: Install and try the package on a machine with nothing else
+        run: >
+          docker run --rm -v "$PWD:/src:ro" -w /src debian:13
+          sh .github/try.sh "${GITHUB_REF_NAME#v}"
       - name: publish
         env:
           GH_TOKEN: ${{ github.token }}

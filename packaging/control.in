@@ -1,0 +1,18 @@
+Package: dnsinfo
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: dhtech <dhtech@users.noreply.github.com>
+Installed-Size: @SIZE@
+Suggests: bind9
+Section: net
+Priority: optional
+Homepage: https://github.com/dhtech/dnsinfo
+Description: counts which domains a name server is asked for
+ dnsinfo listens on a unix socket for the dnstap stream of a name
+ server (BIND 9), cuts every name asked for down to its domain and
+ keeps a counter per domain and hour in a PostgreSQL database. Nothing
+ about who asked is kept.
+ .
+ One static binary and the unit dnsinfo.service. A first installation
+ neither enables nor starts it: it needs a database first
+ (DNSINFO_DSN in /etc/default/dnsinfo).

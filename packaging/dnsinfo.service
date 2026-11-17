@@ -1,28 +1,31 @@
-# An example unit. Put the connection string in /etc/dnsinfo.env as
-#   DNSINFO_DSN=host=db.example.net dbname=dnsinfo user=dnsinfo sslmode=verify-full ...
-# readable by root only (systemd reads it, the service's user need not).
+# dnsinfo - which domains the name server is asked for.
 #
-# The name server must be able to write to the socket: here it is given
-# to the group "bind", and the directory is opened for that group.
+# The database: DNSINFO_DSN in /etc/default/dnsinfo (root only), or an
+# Environment= line in a drop-in. More options: DNSINFO_OPTS, the same
+# way (for example "-metrics /var/lib/prometheus/node-exporter/dnsinfo.prom",
+# with that directory in a ReadWritePaths= line).
+#
 # In named.conf:
 #   options {
 #       dnstap { client response; };
 #       dnstap-output unix "/run/dnsinfo/dnstap.sock";
 #   };
+#
+# It runs as uid 0 WITHOUT any of root's privileges (the capability set
+# is empty): what is left is what any owner may do - write its own
+# socket and give it to a group it is in. That group is "bind", so that
+# the name server, and nobody else, may write to the socket.
 [Unit]
 Description=dnsinfo - which domains the name server is asked for
 Documentation=https://github.com/dhtech/dnsinfo
 After=network-online.target
 Wants=network-online.target
-# the name server connects to our socket: be there first
-Before=named.service
 
 [Service]
-EnvironmentFile=/etc/dnsinfo.env
-ExecStart=/usr/local/bin/dnsinfo -socket /run/dnsinfo/dnstap.sock -socket-group bind
+EnvironmentFile=-/etc/default/dnsinfo
+ExecStart=/usr/sbin/dnsinfo -socket /run/dnsinfo/dnstap.sock -socket-group bind $DNSINFO_OPTS
 Restart=always
 RestartSec=5
-DynamicUser=yes
 SupplementaryGroups=bind
 RuntimeDirectory=dnsinfo
 RuntimeDirectoryMode=0755
