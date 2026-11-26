@@ -46,6 +46,26 @@ var migrations = []string{
 		FROM dnsinfo_domain
 		GROUP BY domain;
 	COMMENT ON VIEW dnsinfo_total IS 'Every domain with its count over all hours: the total. Sort by answers for the top list.';`,
+
+	// refused is a result of its own: a resolver that will not answer an
+	// asker (a zone kept for some networks only) is following its rule,
+	// and counted as failed it hid the answers that really failed. Rows
+	// written before this have refusals among their failed. The column
+	// stands last in the view: a view is replaced, not dropped, so that
+	// whoever was let read it still is.
+	`COMMENT ON COLUMN dnsinfo_domain.result IS 'answered, noname (no such name), refused (the resolver would not answer this asker) or failed (everything else)';
+
+	CREATE OR REPLACE VIEW dnsinfo_total AS
+		SELECT domain,
+		       sum(answers)::bigint AS answers,
+		       coalesce(sum(answers) FILTER (WHERE result = 'answered'), 0)::bigint AS answered,
+		       coalesce(sum(answers) FILTER (WHERE result = 'noname'), 0)::bigint AS noname,
+		       coalesce(sum(answers) FILTER (WHERE result = 'failed'), 0)::bigint AS failed,
+		       min(hour) AS first_hour,
+		       max(hour) AS last_hour,
+		       coalesce(sum(answers) FILTER (WHERE result = 'refused'), 0)::bigint AS refused
+		FROM dnsinfo_domain
+		GROUP BY domain;`,
 }
 
 // Store is the database.

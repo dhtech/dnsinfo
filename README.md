@@ -23,7 +23,11 @@ never reads it out.
 ```
 
 - `dnsinfo_domain`: one row per domain, hour and result. `result` is
-  `answered`, `noname` (no such name) or `failed` (everything else).
+  `answered`, `noname` (no such name), `refused` (the resolver would
+  not answer this asker - a zone it keeps for some networks only) or
+  `failed` (everything else: the resolver could not get an answer).
+  Rows written by a version before 0.2.0 have the refusals among
+  their `failed`.
 - `dnsinfo_total`: a view with every domain's count over all hours.
 
 ```sql

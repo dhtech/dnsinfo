@@ -15,7 +15,8 @@ import (
 const (
 	Answered = "answered" // NOERROR - an answer, or "the name exists, not that kind of record"
 	NoName   = "noname"   // NXDOMAIN - no such name
-	Failed   = "failed"   // everything else: SERVFAIL, REFUSED, FORMERR ...
+	Refused  = "refused"  // REFUSED - the resolver would not answer this asker: its rule, not its fault
+	Failed   = "failed"   // everything else: SERVFAIL, FORMERR ...
 )
 
 // Invalid stands for a name that is no host name: bytes outside letters,
@@ -49,6 +50,8 @@ func Answer(msg []byte) (name string, result string, err error) {
 		result = Answered
 	case dnsmessage.RCodeNameError:
 		result = NoName
+	case dnsmessage.RCodeRefused:
+		result = Refused
 	default:
 		result = Failed
 	}
